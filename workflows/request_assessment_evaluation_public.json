@@ -1,0 +1,346 @@
+{
+  "name": "Request Assessment Evaluation",
+  "nodes": [
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "YOUR_DATA_TABLE_ID",
+          "mode": "list",
+          "cachedResultName": "rag_evaluation_cases"
+        }
+      },
+      "type": "n8n-nodes-base.evaluationTrigger",
+      "typeVersion": 4.7,
+      "position": [
+        -1104,
+        32
+      ],
+      "id": "c963103e-9129-4b05-a8c9-1f7fa1ec35ae",
+      "name": "When fetching a dataset row"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "48031e02-4197-4aba-9635-cc1dc9e7a6b6",
+              "name": "title",
+              "value": "={{ $json.request_title }}",
+              "type": "string"
+            },
+            {
+              "id": "1a082f07-ea61-4edf-9121-265c6b253b64",
+              "name": "description",
+              "value": "={{ $json.request_description }}",
+              "type": "string"
+            },
+            {
+              "id": "9b3f88a1-2d4d-4a4c-a2d6-9904bd5a352d",
+              "name": "department",
+              "value": "={{ $json.department }}",
+              "type": "string"
+            },
+            {
+              "id": "fa50a6fd-a156-4dab-8715-1000e1ad0d14",
+              "name": "submitted_at",
+              "value": "={{ $now }}",
+              "type": "string"
+            },
+            {
+              "id": "51f493ff-6bbd-4be8-8023-f3ad03a70da5",
+              "name": "id",
+              "value": "={{ Number($json.id) }}",
+              "type": "number"
+            },
+            {
+              "id": "6e7cb167-5972-410f-becc-b4b9a4919348",
+              "name": "=expected_human_review",
+              "value": "={{ $json.expected_human_review === '1' }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -880,
+        32
+      ],
+      "id": "2e33df0d-470d-48bb-8f0f-f3b4febb16e0",
+      "name": "Normalize Evaluation Input"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "de4ddf23-429e-43c2-9ca5-ca178c948dfa",
+              "name": "title",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "b9bbd0dc-7be3-48ed-a117-ab561483474c",
+              "name": "description",
+              "value": "={{ $json.description }}",
+              "type": "string"
+            },
+            {
+              "id": "f9095f2a-2d7f-4a6e-b9a5-44ec8a01d22f",
+              "name": "department",
+              "value": "={{ $json.department }}",
+              "type": "string"
+            },
+            {
+              "id": "15a8c499-c687-4e58-a5a2-ba4c1787d4b2",
+              "name": "submitted_at",
+              "value": "={{ $json.submitted_at }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -656,
+        32
+      ],
+      "id": "2a8307a3-6f42-40d0-9edf-ad03a526f5ae",
+      "name": "Canonical Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const expected = $('Canonical Request').first().json;\nconst coreResult = $('Request Assessment Core').first().json;\n\nconst actual = coreResult.output;\nconst retrievedSources = coreResult.retrieved_sources || [];\n\nconst retrievalPass = retrievedSources.some(\n  source => source === expected.expected_source\n);\n\nconst decisionPass =\n  actual.risk_level === expected.expected_risk_level &&\n  actual.needs_human_review === expected.expected_human_review;\n\nreturn [\n  {\n    json: {\n      id: expected.id,\n      actual_sources: retrievedSources.join('; '),\n      actual_risk_level: actual.risk_level,\n      actual_human_review: actual.needs_human_review,\n      actual_recommendation: actual.recommendation,\n      retrieval_pass: retrievalPass,\n      decision_pass: decisionPass\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        32
+      ],
+      "id": "074dd8cd-bb27-4f42-a9a1-1e1bb0fcb56e",
+      "name": "Build Evaluation Result"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "YOUR_DATA_TABLE_ID",
+          "mode": "list",
+          "cachedResultName": "rag_evaluation_cases"
+        },
+        "outputs": {
+          "values": [
+            {
+              "outputName": "actual_sources",
+              "outputValue": "={{ $json.actual_sources }}"
+            },
+            {
+              "outputName": "actual_risk_level",
+              "outputValue": "={{ $json.actual_risk_level }}"
+            },
+            {
+              "outputName": "actual_human_review",
+              "outputValue": "={{ $json.actual_human_review }}"
+            },
+            {
+              "outputName": "actual_recommendation",
+              "outputValue": "={{ $json.actual_recommendation }}"
+            },
+            {
+              "outputName": "retrieval_pass",
+              "outputValue": "={{ $json.retrieval_pass }}"
+            },
+            {
+              "outputName": "decision_pass",
+              "outputValue": "={{ $json.decision_pass }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.evaluation",
+      "typeVersion": 4.8,
+      "position": [
+        0,
+        32
+      ],
+      "id": "bf8ac1f9-814f-4248-ab49-81e79fc81d60",
+      "name": "Evaluation: Set Outputs"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "YOUR_REQUEST_ASSESSMENT_CORE_WORKFLOW_ID",
+          "mode": "list",
+          "cachedResultName": "Request Assesment Core"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $json.title }}\n",
+            "department": "={{ $json.department }}",
+            "description": "={{ $json.description }}",
+            "submitted_by": "={{ $json.submitted_by }}",
+            "submitted_at": "={{ $json.submitted_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "department",
+              "displayName": "department",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "submitted_by",
+              "displayName": "submitted_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "submitted_at",
+              "displayName": "submitted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        -432,
+        32
+      ],
+      "id": "afa09598-9c7f-4c9a-aac4-dc61bfdfbfdb",
+      "name": "Request Assessment Core"
+    },
+    {
+      "parameters": {
+        "content": "## Request Assessment Evaluation\nRegression-test harness for the shared assessment core. Loads representative test cases, compares retrieved sources and AI decisions against expected values, and writes pass/fail results back to the evaluation dataset.  \nThe current baseline contains 6 synthetic cases. Passing all 6 is a regression check, not a claim of production-level accuracy.",
+        "height": 176,
+        "width": 464
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1104,
+        -224
+      ],
+      "typeVersion": 1,
+      "id": "ae72a4ec-6293-4f22-9212-d016ac1942a1",
+      "name": "Sticky Note"
+    }
+  ],
+  "connections": {
+    "When fetching a dataset row": {
+      "main": [
+        [
+          {
+            "node": "Normalize Evaluation Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Evaluation Input": {
+      "main": [
+        [
+          {
+            "node": "Canonical Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Canonical Request": {
+      "main": [
+        [
+          {
+            "node": "Request Assessment Core",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Evaluation Result": {
+      "main": [
+        [
+          {
+            "node": "Evaluation: Set Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluation: Set Outputs": {
+      "main": [
+        []
+      ]
+    },
+    "Request Assessment Core": {
+      "main": [
+        [
+          {
+            "node": "Build Evaluation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [],
+  "tags": []
+}

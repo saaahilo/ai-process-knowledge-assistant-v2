@@ -1,0 +1,9 @@
+# macOS
+.DS_Store
+
+# Private/raw workflow exports
+private_exports/
+
+# Python
+__pycache__/
+*.pyc

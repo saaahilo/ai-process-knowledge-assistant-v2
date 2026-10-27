@@ -1,0 +1,261 @@
+{
+  "name": "Knowledge Base Indexing",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (let i = 0; i < items.length; i++) {\n\n  const buffer = await this.helpers.getBinaryDataBuffer(i, 'data');\n  const fileText = buffer.toString('utf8');\n\n  const match = fileText.match(\n    /^---\\s*\\n([\\s\\S]*?)\\n---\\s*\\n([\\s\\S]*)$/\n  );\n\n  let metadata = {};\n  let content = fileText;\n\n  if (match) {\n    const yamlText = match[1];\n    content = match[2].trim();\n\n    for (const line of yamlText.split('\\n')) {\n      const separatorIndex = line.indexOf(':');\n\n      if (separatorIndex === -1) continue;\n\n      const key = line.slice(0, separatorIndex).trim();\n\n      let value = line\n        .slice(separatorIndex + 1)\n        .trim()\n        .replace(/^[\"']|[\"']$/g, '');\n\n      metadata[key] = value;\n    }\n  }\n\n  output.push({\n    json: {\n      content,\n      metadata\n    }\n  });\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        16
+      ],
+      "id": "de0bbcb3-a514-46eb-97c9-24947f4b18cb",
+      "name": "Parse Document Metadata"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const content = item.json.content;\n  const metadata = item.json.metadata;\n\n  const sections = content\n    .split(/(?=^##\\s+)/gm)\n    .map(section => section.trim())\n    .filter(Boolean);\n\n  for (const section of sections) {\n    // Remove Markdown headings temporarily.\n    const bodyText = section\n      .replace(/^#{1,6}\\s+.+$/gm, '')\n      .trim();\n\n    // Skip sections that contain only a heading.\n    if (bodyText.length === 0) {\n      continue;\n    }\n\n    const headingMatch = section.match(/^##\\s+(.+)$/m);\n\n    const sectionTitle = headingMatch\n      ? headingMatch[1].trim()\n      : metadata.title;\n\n    output.push({\n      json: {\n        content: section,\n        metadata: {\n          ...metadata,\n          section_title: sectionTitle\n        }\n      }\n    });\n  }\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        16
+      ],
+      "id": "c62d2508-2b6c-4c3d-8551-7b1b6db3a75b",
+      "name": "Split Markdown Sections"
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.content }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "document_id",
+                "value": "={{ $json.metadata.document_id }}"
+              },
+              {
+                "name": "title",
+                "value": "={{ $json.metadata.title }}"
+              },
+              {
+                "name": "department",
+                "value": "={{ $json.metadata.department }}"
+              },
+              {
+                "name": "document_type",
+                "value": "={{ $json.metadata.document_type }}"
+              },
+              {
+                "name": "version",
+                "value": "={{ $json.metadata.version }}"
+              },
+              {
+                "name": "effective_date",
+                "value": "={{ $json.metadata.effective_date }}"
+              },
+              {
+                "name": "owner",
+                "value": "={{ $json.metadata.owner }}"
+              },
+              {
+                "name": "status",
+                "value": "={{ $json.metadata.status }}"
+              },
+              {
+                "name": "section_title",
+                "value": "={{ $json.metadata.section_title }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        768,
+        224
+      ],
+      "id": "c2747cca-71da-4810-b6b5-c376d4bb831d",
+      "name": "Qdrant Data Loader"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "automation_knowledge_base",
+          "mode": "list",
+          "cachedResultName": "automation_knowledge_base"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        592,
+        16
+      ],
+      "id": "98bdb1fc-f0fa-4491-a55d-6663ecd88785",
+      "name": "Qdrant Insert Knowledge"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        16
+      ],
+      "id": "b5f6f3df-3e25-4231-a40f-3333d91e3ae0",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/files/knowledge-base/*.md",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -80,
+        16
+      ],
+      "id": "fa543dee-9ff8-408d-808d-49a281882b2d",
+      "name": "Read Knowledge Base Files"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        592,
+        224
+      ],
+      "id": "95991f27-83ed-411d-987d-97f8b3d9700a",
+      "name": "OpenAI Embeddings - Indexing"
+    },
+    {
+      "parameters": {
+        "chunkOverlap": 150,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        768,
+        384
+      ],
+      "id": "2554611f-0351-4386-a1fc-ff7034c26d7e",
+      "name": "Recursive Text Splitter"
+    },
+    {
+      "parameters": {
+        "content": "## Knowledge Base Indexing\nLoads the synthetic internal knowledge base, extracts document metadata, splits Markdown into structure-aware sections, creates embeddings, and stores the resulting chunks in Qdrant.  \nThis workflow is run when the knowledge base is rebuilt or updated; it is separate from runtime request processing.",
+        "height": 176,
+        "width": 464
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -304,
+        -240
+      ],
+      "typeVersion": 1,
+      "id": "711b7977-5ff0-4a22-9708-e476ee5fa9ce",
+      "name": "Sticky Note"
+    }
+  ],
+  "connections": {
+    "Parse Document Metadata": {
+      "main": [
+        [
+          {
+            "node": "Split Markdown Sections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Markdown Sections": {
+      "main": [
+        [
+          {
+            "node": "Qdrant Insert Knowledge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Qdrant Insert Knowledge",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Read Knowledge Base Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Knowledge Base Files": {
+      "main": [
+        [
+          {
+            "node": "Parse Document Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Embeddings - Indexing": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Insert Knowledge",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Qdrant Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [],
+  "tags": []
+}

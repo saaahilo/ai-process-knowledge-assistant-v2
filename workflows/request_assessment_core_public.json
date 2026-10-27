@@ -1,0 +1,296 @@
+{
+  "name": "Request Assesment Core",
+  "nodes": [
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        352,
+        368
+      ],
+      "id": "002d49fa-b500-42b6-951d-a43a634da56f",
+      "name": "Business Decision"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"recommendation\": {\n      \"type\": \"string\"\n    },\n    \"implementation_approach\": {\n      \"type\": \"string\"\n    },\n    \"risk_level\": {\n      \"type\": \"string\",\n      \"enum\": [\"Low\", \"Medium\", \"High\"]\n    },\n    \"needs_human_review\": {\n      \"type\": \"boolean\"\n    },\n    \"human_review_reason\": {\n      \"type\": \"string\"\n    },\n    \"jira_labels\": {\n  \"type\": \"array\",\n  \"items\": {\n    \"type\": \"string\"\n  },\n  \"maxItems\": 3\n},\n    \"referenced_documents\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"maxItems\": 3\n    }\n  },\n  \"required\": [\n    \"recommendation\",\n    \"implementation_approach\",\n    \"risk_level\",\n    \"needs_human_review\",\n    \"human_review_reason\",\n    \"referenced_documents\",\n    \"jira_labels\"\n  ],\n  \"additionalProperties\": false\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        496,
+        448
+      ],
+      "id": "61847fb6-62dd-4331-98e0-d112ed66f08f",
+      "name": "Recommendation schema"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are evaluating a business process request using relevant internal company knowledge.\n\nYour task is to produce a concise, operational recommendation based only on:\n1. the submitted business request, and\n2. the retrieved internal knowledge provided below.\n\nDo not invent company facts, policies, tools, previous projects, data sources, technical implementation details, timelines, or metrics that are not explicitly supported by the retrieved internal knowledge.\n\nIf the internal knowledge does not specify how the solution should be implemented, keep the implementation approach high-level and describe only the next sensible step.\n\nKeep the response concise.\nEach text field should be no more than 1–2 short sentences.\nDo not provide a long analysis.\nDo not use markdown.\nDo not add extra fields.\n\nEvaluate only the automation actually requested.\n\nDo not add optional AI capabilities, extra workflow features, or implementation components merely because they appear in retrieved examples or policies.\n\nSet needs_human_review based on the normal operation of the requested workflow. Do not set it to true solely because the workflow requires normal testing, implementation validation, process-owner approval before deployment, or review of an optional feature that is not part of the submitted request.\n\nBusiness request:\n\nTitle:\n{{ $json.request.title }}\n\nDescription:\n{{ $json.request.description }}\n\nDepartment:\n{{ $json.request.department }}\n\nApproved Jira label policy:\n\n{{ JSON.stringify($json.jira_label_policy) }}\n\nMandatory risk and human-review policy:\n\n{{ $json.mandatory_risk_policy }}\n\nRelevant internal knowledge:\n\n{{ JSON.stringify($json.retrieved_knowledge) }}\n\nThe retrieval score indicates relative semantic similarity only. Do not interpret it as a probability, factual confidence score, or risk score. Use the retrieved document content itself when making the recommendation.\n\nEvaluate the request and determine:\n\n- recommendation: what the company should do next\n- implementation_approach: a short, high-level practical approach supported by the retrieved knowledge\n- risk_level: Low, Medium, or High\n- needs_human_review: true or false\n- human_review_reason: why human review is or is not required\n- jira_labels: choose up to 3 appropriate Jira labels using only values from the approved Jira label policy\n- referenced_documents: the titles of the internal documents that materially influenced the recommendation\n\nHuman review should normally be required when one or more of the following apply:\n- the automation directly affects customers\n- the risk level is significant\n- internal guidelines require approval or oversight\n- the proposed action is ambiguous, sensitive, or difficult to reverse\n- AI decisions could cause meaningful operational errors\n\nIf none of these conditions apply and the retrieved knowledge supports safe automated handling, needs_human_review may be false.\n\nIf the retrieved knowledge is insufficient to support a specific implementation detail, do not guess. Keep the recommendation general.\n\nFor jira_labels:\n- use only labels explicitly present in the approved Jira label policy\n- do not invent new labels\n- choose labels that best represent the department, type of work, and current stage\n\nReturn only the required structured output.",
+        "hasOutputParser": true,
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        352,
+        96
+      ],
+      "id": "13eb3498-4577-457d-9127-b7af4673d2c9",
+      "name": "RAG Recommendation"
+    },
+    {
+      "parameters": {
+        "jsCode": "const canonical = $('When Executed by Another Workflow').first().json;\n\nconst riskPolicy =\n  $('Parse Mandatory Risk Policy').first().json.risk_policy;\nconst request = {\n  title: canonical.title,\n  description: canonical.description,\n  department: canonical.department,\n  submitted_by: canonical.submitted_by || '',\n  submitted_at: canonical.submitted_at || ''\n};\n\nconst results = $input.all().map(item => item.json);\n\nconst retrievedKnowledge = results.map(result => {\n  const metadata = result.document?.metadata || {};\n\nconst documentTitle = metadata.title || 'Unknown document';\nconst sectionTitle = metadata.section_title || 'Unknown section';\n\nreturn {\n  source_label: `${documentTitle} — ${sectionTitle}`,\n  document_title: documentTitle,\n  section_title: sectionTitle,\n  content: result.document?.pageContent || '',\n  score: result.score,\n  metadata: {\n    document_id: metadata.document_id,\n    department: metadata.department,\n    document_type: metadata.document_type,\n    version: metadata.version,\n    effective_date: metadata.effective_date,\n    owner: metadata.owner,\n    status: metadata.status\n  }\n};\n});\n\nconst jiraLabelPolicy = {\n  department: [\n    \"customer-support\",\n    \"sales\",\n    \"finance\",\n    \"hr\",\n    \"it-operations\"\n  ],\n  work_type: [\n    \"ai-automation\",\n    \"process-improvement\",\n    \"knowledge-management\"\n  ],\n  stage: [\n    \"discovery\",\n    \"pilot\",\n    \"production\"\n  ]\n};\n\n\nreturn [\n  {\n    json: {\n      request,\n      retrieved_knowledge: retrievedKnowledge,\n      jira_label_policy: jiraLabelPolicy,\n      mandatory_risk_policy: riskPolicy,\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        96
+      ],
+      "id": "257e97ed-4e51-452b-ad9a-70489fc7dda2",
+      "name": "Prepare RAG Context"
+    },
+    {
+      "parameters": {
+        "jsCode": "const buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst fileText = buffer.toString('utf8');\n\n// Remove YAML front matter\nconst content = fileText\n  .replace(/^---\\s*\\n[\\s\\S]*?\\n---\\s*\\n/, '')\n  .trim();\n\nreturn [\n  {\n    json: {\n      risk_policy: content\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        96
+      ],
+      "id": "7d49f169-4e7a-4796-bd56-4e9716860fd1",
+      "name": "Parse Mandatory Risk Policy"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -352,
+        288
+      ],
+      "id": "74480b97-9dd7-446a-84e3-bded8177fc70",
+      "name": "Embeddings OpenAI Q-Retrieval"
+    },
+    {
+      "parameters": {
+        "mode": "load",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "automation_knowledge_base",
+          "mode": "list",
+          "cachedResultName": "automation_knowledge_base"
+        },
+        "prompt": "=Title: {{ $('When Executed by Another Workflow').first().json.title }}  \n\nDescription: {{ $('When Executed by Another Workflow').first().json.description }}  \n\nDepartment: {{ $('When Executed by Another Workflow').first().json.department }}",
+        "topK": 5,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        -352,
+        96
+      ],
+      "id": "996e4f51-f8be-43a6-b5b6-c7eeab283e7c",
+      "name": "Qdrant Retrieve Context"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/files/knowledge-base/ai-risk-and-review-policy.md",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -832,
+        96
+      ],
+      "id": "ab42495f-2248-43f6-92df-2b8db21d087a",
+      "name": "Read Mandatory Risk Policy"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "title"
+            },
+            {
+              "name": "description"
+            },
+            {
+              "name": "department"
+            },
+            {
+              "name": "submitted_by"
+            },
+            {
+              "name": "submitted_at"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1008,
+        96
+      ],
+      "id": "b41f4e3e-6f57-4337-934d-293a843e8796",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const assessment = $('RAG Recommendation').first().json.output;\nconst ragContext = $('Prepare RAG Context').first().json;\n\nconst retrievedSources = [\n  ...new Set(\n    (ragContext.retrieved_knowledge || [])\n      .map(item => item.document_title)\n      .filter(Boolean)\n  )\n];\n\nreturn [\n  {\n    json: {\n      output: assessment,\n      retrieved_sources: retrievedSources\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        96
+      ],
+      "id": "fc679901-b744-4ee9-a50d-ae6902c5d19f",
+      "name": "Build Assessment Output"
+    },
+    {
+      "parameters": {
+        "content": "## Request Assessment Core\nReusable assessment workflow called by both operational intake and evaluation. Loads mandatory AI governance policy, retrieves request-specific knowledge from Qdrant, and generates a structured recommendation including risk, human-review requirements, Jira labels, and referenced sources.",
+        "height": 176,
+        "width": 464
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -992,
+        -224
+      ],
+      "typeVersion": 1,
+      "id": "f5f8ec01-26de-40ec-b001-d50ad117ed21",
+      "name": "Sticky Note"
+    }
+  ],
+  "connections": {
+    "Business Decision": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "RAG Recommendation",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recommendation schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "RAG Recommendation",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare RAG Context": {
+      "main": [
+        [
+          {
+            "node": "RAG Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Mandatory Risk Policy": {
+      "main": [
+        [
+          {
+            "node": "Qdrant Retrieve Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI Q-Retrieval": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Retrieve Context",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Retrieve Context": {
+      "main": [
+        [
+          {
+            "node": "Prepare RAG Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Mandatory Risk Policy": {
+      "main": [
+        [
+          {
+            "node": "Parse Mandatory Risk Policy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Read Mandatory Risk Policy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Build Assessment Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [],
+  "tags": []
+}
