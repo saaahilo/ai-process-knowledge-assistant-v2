@@ -308,11 +308,11 @@ Some of the main lessons were:
 
 ### Request Assessment Core
 
-![Knowledge Base Indexing](docs/screenshots/knowledge_base_indexing.png)
+![Request Assessment Core](docs/screenshots/request_assessment_core.png)
 
 ### Knowledge Base Indexing
 
-![Request Assessment Core](docs/screenshots/request_assessment_core.png)
+![Knowledge Base Indexing](docs/screenshots/knowledge_base_indexing.png)
 
 ### Request Assessment Evaluation
 
