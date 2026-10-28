@@ -1,6 +1,6 @@
 # AI Process & Knowledge Assistant
 
-An n8n portfolio project exploring AI-assisted automation request assessment, RAG-based knowledge retrieval, human-in-the-loop routing, Jira handoff, and regression evaluation.
+A self-hosted n8n system for AI-assisted automation request assessment using Qdrant RAG, structured LLM outputs, human-in-the-loop routing, Jira handoff, and regression evaluation.
 
 The system takes an automation request, retrieves relevant internal knowledge from Qdrant, generates a structured assessment, routes ambiguous or higher-risk requests to human review, and creates Jira tasks for approved requests. Final outcomes are logged for traceability.
 
@@ -58,14 +58,16 @@ Needs Human Review?
        / \
      Yes  No
       ↓    ↓
- Human     Continue
- Review
-      ↓
- Approval / Rejection
-      ↓
- Jira Task
-      ↓
- Audit Log
+ Human    Jira Task
+ Review      ↓
+   ↓       Audit Log
+Approved?
+ /     \
+Yes     No
+ ↓       ↓
+Jira   Audit Log
+ ↓
+Audit Log
 ```
 
 The workflow does **not** automatically implement the submitted business automation.
@@ -162,7 +164,9 @@ This was one of the parts I wanted to include because it turns the model output 
 
 ## Evaluation
 
-The project currently includes six synthetic regression cases covering:
+The project includes a **small targeted regression set of six synthetic cases**. The cases were selected to cover the main knowledge-base areas and different routing and risk behaviors, rather than to act as a production-scale model benchmark.
+
+The current cases cover:
 
 - Customer Support
 - Finance
@@ -173,37 +177,40 @@ The project currently includes six synthetic regression cases covering:
 
 Two checks are used:
 
-**Retrieval pass**  
-The expected document appears among the retrieved sources.
+**Retrieval pass**\
+The expected source document appears among the retrieved sources.
 
-**Decision pass**  
+**Decision pass**\
 The predicted risk level and human-review decision match the expected result.
 
-The initial baseline passed:
+### Initial Baseline
 
-```text
-4 / 6
-```
+The first regression run passed **4/6 cases**.
 
 The two failures had different causes:
 
-- one came from model interpretation, where retrieved examples caused the model to expand the scope of the original request
-- one came from retrieval architecture, where the mandatory risk policy was not guaranteed to be available
+- **Model interpretation:** retrieved examples caused the model to expand the scope of a low-risk request and unnecessarily require human review.
+- **Retrieval architecture:** the mandatory risk policy was not guaranteed to be available through semantic retrieval, which led to an incorrect risk decision for an ambiguous request.
 
-The resulting changes were general rather than case-specific:
+The fixes were intentionally general rather than case-specific:
 
-- the prompt was clarified so the model evaluates only the requested automation
-- mandatory risk policy was separated from semantic retrieval
+- the prompt was clarified so the model evaluates only the automation actually requested
+- mandatory risk and human-review policy was separated from dynamic semantic retrieval and loaded for every assessment
 
-The current regression baseline is:
+### Current Baseline
 
-```text
-6 / 6
-```
+After these changes, all **6/6 regression cases passed**.
 
-The same baseline continued to pass after migrating to Qdrant and modularizing the workflows.
+The same baseline was rerun after:
 
-This is only a small synthetic regression baseline and should not be interpreted as production-level model accuracy.
+- migrating from the prototype vector store to Qdrant
+- separating knowledge-base indexing from runtime assessment
+- extracting the reusable Request Assessment Core
+- separating operational intake from evaluation
+
+The six cases continued to pass after these changes.
+
+This result is a **regression baseline for a small set of known synthetic cases**. It is not a claim of 100% model accuracy or production-level reliability.
 
 More detail is available in [docs/evaluation-summary.md](docs/evaluation-summary.md).
 
@@ -211,31 +218,18 @@ More detail is available in [docs/evaluation-summary.md](docs/evaluation-summary
 
 ## How the Project Evolved
 
-The first version was simpler and more monolithic.
+The first version used simpler retrieval and kept most of the logic inside one larger workflow.
 
-I initially focused on understanding basic knowledge retrieval and how retrieved context affects an LLM-based recommendation.
+As the project developed, I added structured outputs, human review, Jira handoff, audit logging, and regression evaluation. I later migrated the retrieval layer to Qdrant for persistent vector storage.
 
-From there, I gradually added:
+Once the behavior was stable, I separated the system into four responsibilities:
 
-```text
-basic retrieval
-    ↓
-structured outputs
-    ↓
-routing and human review
-    ↓
-Jira handoff and audit logging
-    ↓
-evaluation
-    ↓
-Qdrant migration
-    ↓
-modular workflows
-```
+- knowledge-base indexing
+- shared request assessment
+- operational intake and handoff
+- regression evaluation
 
-Once the behavior was more stable, I split indexing, assessment, operational intake, and evaluation into separate workflows.
-
-The operational and evaluation flows now both use the same Request Assessment Core.
+The operational and evaluation workflows now both reuse the same Request Assessment Core, which avoids maintaining separate copies of the assessment logic.
 
 ---
 
@@ -245,14 +239,10 @@ The most useful part of the project was learning how to debug AI workflows beyon
 
 Some of the main lessons were:
 
-- retrieval failures and model interpretation failures need different fixes
-- mandatory rules should not depend entirely on similarity search
-- structured outputs make routing and external actions much easier to manage
-- external integrations require adapting data to the target system's expected structure
-- regression cases are useful when changing prompts, retrieval, or infrastructure
-- modularization becomes more useful once the workflow behavior is already understood
-- audit logging makes automated decisions easier to inspect later
-- self-hosting adds practical concerns such as persistence, file mounts, and service networking
+- separating retrieval failures from model-interpretation failures makes debugging much clearer
+- mandatory governance rules should not depend entirely on semantic retrieval
+- structured outputs make routing, validation, and downstream integrations easier to manage
+- regression testing and audit logging become more important as AI workflows gain more side effects
 
 ---
 
@@ -373,8 +363,8 @@ This is a learning and portfolio project, not a production company system.
 
 Current limitations include:
 
-- synthetic knowledge base
-- six-case evaluation set
+- a synthetic knowledge base
+- a small six-case regression set
 - no production authentication or access-control model
 - no reranking or hybrid retrieval
 - limited monitoring and observability
@@ -387,13 +377,7 @@ The current scope is intentionally focused on automation-request assessment, rou
 
 ## Possible Next Steps
 
-If I continue developing this project, areas I would explore include:
-
-- larger evaluation datasets
-- more ambiguous and edge cases
-- retrieval metrics such as Recall@k or MRR
-- metadata filtering
-- reranking or hybrid search
-- stronger monitoring
-- access control
-- document versioning and update handling
+- Expand the regression dataset with more ambiguous and edge cases
+- Add retrieval metrics and experiment with metadata filtering or reranking
+- Improve monitoring and observability
+- Add stronger access control and document-version handling
